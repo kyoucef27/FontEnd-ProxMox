@@ -1,6 +1,10 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
+
+export const dynamic = "force-dynamic";
+
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
 export default async function Home() {
   let productCount = 0;
@@ -10,31 +14,56 @@ export default async function Home() {
   let recentProducts: any[] = [];
 
   try {
-    const [pCount, oCount, deliveredOrders, recOrders, recProducts] = await Promise.all([
-      prisma.product.count(),
-      prisma.order.count({ where: { status: 'pending' } }),
-      prisma.order.findMany({
-        where: { status: 'delivered' },
-        select: { total: true },
-      }),
-      prisma.order.findMany({
-        take: 4,
-        orderBy: { createdAt: 'desc' },
-        include: { customer: true },
-      }),
-      prisma.product.findMany({
-        take: 3,
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, name: true, category: true, price: true, inStock: true },
-      }),
+    const cookieStore = await cookies();
+    const token = cookieStore.get("token")?.value;
+    const authHeaders: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+
+    const [analyticsRes, ordersRes, productsRes] = await Promise.all([
+      fetch(`${BACKEND_URL}/api/order/analytics`, {
+        headers: authHeaders,
+        cache: "no-store",
+      }).catch(() => null),
+      fetch(`${BACKEND_URL}/api/order`, {
+        headers: authHeaders,
+        cache: "no-store",
+      }).catch(() => null),
+      fetch(`${BACKEND_URL}/api/products`, {
+        cache: "no-store",
+      }).catch(() => null),
     ]);
-    productCount = pCount;
-    pendingOrderCount = oCount;
-    totalRevenue = deliveredOrders.reduce((sum, order) => sum + order.total, 0);
-    recentOrders = recOrders;
-    recentProducts = recProducts;
+
+    if (analyticsRes && analyticsRes.ok) {
+      const data = await analyticsRes.json();
+      if (data.statistics) {
+        pendingOrderCount = data.statistics.pendingOrders ?? 0;
+        totalRevenue = data.statistics.totalRevenue ?? 0;
+      }
+    }
+
+    if (ordersRes && ordersRes.ok) {
+      const data = await ordersRes.json();
+      const allOrders: any[] = data.orders || [];
+      recentOrders = allOrders.slice(0, 4);
+      if (!totalRevenue && allOrders.length > 0) {
+        totalRevenue = allOrders
+          .filter((o: any) => o.status === "delivered")
+          .reduce((sum: number, o: any) => sum + (Number(o.total) || 0), 0);
+      }
+      if (!pendingOrderCount) {
+        pendingOrderCount = allOrders.filter((o: any) => o.status === "pending").length;
+      }
+    }
+
+    if (productsRes && productsRes.ok) {
+      const data = await productsRes.json();
+      const allProducts: any[] = data.products || [];
+      productCount = data.count ?? allProducts.length;
+      recentProducts = allProducts.slice(0, 3);
+    }
   } catch (error) {
-    console.error("Error fetching dashboard stats:", error);
+    console.error("Error fetching dashboard stats from backend API:", error);
   }
 
   const currentDate = new Date().toLocaleDateString('en-US', {

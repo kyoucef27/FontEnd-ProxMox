@@ -1,18 +1,16 @@
 'use client';
 
-import { SessionProvider } from 'next-auth/react';
+import React from 'react';
 
+/**
+ * Velurian AuthProvider
+ * Pure client-side wrapper replacing legacy NextAuth SessionProvider.
+ * Authentication state is maintained via backend JWT tokens & HTTP cookies.
+ */
 export default function AuthProvider({ 
   children 
 }: { 
   children: React.ReactNode 
 }) {
-  return (
-    <SessionProvider 
-      refetchInterval={0} 
-      refetchOnWindowFocus={false}
-    >
-      {children}
-    </SessionProvider>
-  );
+  return <>{children}</>;
 }
