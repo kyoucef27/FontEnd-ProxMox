@@ -11,7 +11,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account, profile, email, credentials }) {
       // Only allow a specific GitHub account
-      return user.email === 'nadialuxe0@gmail.com';
+      return user.email === 'kefifyoucef2020@gmail.com';
     },
     async session({ session, token, user }) {
       return session;

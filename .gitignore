@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Standalone backend service
+/backend/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

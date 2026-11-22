@@ -1,113 +1,98 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectDB } from '../../../../../backend/routes/mongodb';
-import { Product } from '../../../../../backend/models/Product';
-import cloudinary from '../../../../../backend/utils/cloudinary';
+import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/jwt';
+import { unlink } from 'fs/promises';
+import path from 'path';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    // Connect to MongoDB
-    await connectDB();
-    
-    const productId = params.id;
-    
-    // Find the product 
-    const product = await Product.findById(productId);
-    
-    if (!product) {
-      return NextResponse.json(
-        { success: false, message: 'Product not found' },
-        { status: 404 }
-      );
-    }
-    
-    return NextResponse.json(
-      { 
-        success: true, 
-        product
-      },
-      { status: 200 }
-    );
-    
+    const { id: rawId } = await params;
+    const id = Number(rawId);
+    if (isNaN(id)) return NextResponse.json({ success: false, message: 'Invalid ID' }, { status: 400 });
+
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return NextResponse.json({ success: false, message: 'Product not found' }, { status: 404 });
+
+    return NextResponse.json({ success: true, product }, { status: 200 });
   } catch (error: any) {
-    console.error('Error fetching product:', error);
-    return NextResponse.json(
-      { success: false, message: error.message || 'Failed to fetch product' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const { id: rawId } = await params;
+    const id = Number(rawId);
+    if (isNaN(id)) return NextResponse.json({ success: false, message: 'Invalid ID' }, { status: 400 });
+
+    const body = await request.json();
+    
+    // Sanitize updatable fields
+    const data: any = {};
+    if (typeof body.name === 'string') data.name = body.name;
+    if (typeof body.price === 'number') data.price = body.price;
+    if (typeof body.desc === 'string') data.desc = body.desc;
+    if (typeof body.fullDesc === 'string') data.fullDesc = body.fullDesc;
+    if (typeof body.category === 'string') data.category = body.category;
+    if (typeof body.productType === 'string') data.productType = body.productType;
+    if (typeof body.platform === 'string') data.platform = body.platform;
+    if (typeof body.subscriptionDuration === 'string') data.subscriptionDuration = body.subscriptionDuration;
+    if (typeof body.deliveryMethod === 'string') data.deliveryMethod = body.deliveryMethod;
+    if (typeof body.inStock === 'boolean') data.inStock = body.inStock;
+
+    const product = await prisma.product.update({
+      where: { id },
+      data,
+    });
+
+    return NextResponse.json({ success: true, product }, { status: 200 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    // Connect to MongoDB
-    await connectDB();
-    
-    const productId = params.id;
-    
-    // Find the product to get its images
-    const product = await Product.findById(productId);
-    
-    if (!product) {
-      return NextResponse.json(
-        { success: false, message: 'Product not found' },
-        { status: 404 }
-      );
-    }
-    
-    // Extract the public IDs from the image URLs
-    const imageUrls = product.pictures || [];
-    const publicIds = imageUrls.map((url: string) => {
-      // Check if this might be a specid-based URL
-      if (product.specid && url.includes(product.specid)) {
-        return product.specid;
-      }
-      
-      // Otherwise, extract the public ID from a URL like:
-      // https://res.cloudinary.com/cloud-name/image/upload/v1234567890/nadialuxe-products/image-id
-      const parts = url.split('/');
-      const filenameWithExt = parts[parts.length - 1];
-      const filename = filenameWithExt.split('.')[0];
-      // Get the folder + filename (e.g., "nadialuxe-products/image-id")
-      const folderIndex = parts.indexOf('upload') + 2;
-      return parts.slice(folderIndex).join('/');
-    });
-    
-    // Delete images from Cloudinary
-    const deletePromises = publicIds.map((publicId: string) => {
-      try {
-        return cloudinary.uploader.destroy(publicId);
-      } catch (error) {
-        console.error(`Failed to delete image with ID ${publicId}:`, error);
-        // Continue even if one image fails to delete
-        return Promise.resolve();
-      }
-    });
-    
-    // Wait for all image deletions to complete
-    await Promise.all(deletePromises);
-    
-    // Delete the product from MongoDB
-    await Product.findByIdAndDelete(productId);
-    
+    const { id: rawId } = await params;
+    const id = Number(rawId);
+    if (isNaN(id)) return NextResponse.json({ success: false, message: 'Invalid ID' }, { status: 400 });
+
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return NextResponse.json({ success: false, message: 'Product not found' }, { status: 404 });
+
+    // Delete local image files
+    await Promise.allSettled(
+      (product.pictures ?? []).map(async (url: string) => {
+        const filePath = path.join(process.cwd(), 'public', url);
+        await unlink(filePath);
+      })
+    );
+
+    await prisma.product.delete({ where: { id } });
+
     return NextResponse.json(
-      { 
-        success: true, 
-        message: 'Product and associated images deleted successfully'
-      },
+      { success: true, message: 'Product and associated images deleted successfully' },
       { status: 200 }
     );
-    
   } catch (error: any) {
-    console.error('Error deleting product:', error);
-    return NextResponse.json(
-      { success: false, message: error.message || 'Failed to delete product' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }

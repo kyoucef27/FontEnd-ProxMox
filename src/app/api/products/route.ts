@@ -1,25 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectDB } from '../../../../backend/routes/mongodb';
-import { Product } from '../../../../backend/models/Product';
+import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/jwt';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
+import { randomUUID } from 'crypto';
+
+const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
+
+/** Save a Next.js File object to disk, return its public URL path */
+async function saveFile(file: File): Promise<string> {
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  const ext      = path.extname(file.name) || '.jpg';
+  const filename = `${randomUUID()}${ext}`;
+  const buffer   = Buffer.from(await file.arrayBuffer());
+  await writeFile(path.join(UPLOAD_DIR, filename), buffer);
+  return `/uploads/${filename}`;
+}
 
 export async function GET(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    // Connect to MongoDB
-    await connectDB();
-    
-    // Fetch all products
-    const products = await Product.find({}).sort({ createdAt: -1 });
-    
-    return NextResponse.json(
-      { 
-        success: true, 
-        products 
-      },
-      { status: 200 }
-    );
-    
+    const products = await prisma.product.findMany({ orderBy: { createdAt: 'desc' } });
+    return NextResponse.json({ success: true, products }, { status: 200 });
   } catch (error: any) {
-    console.error('Error fetching products:', error);
     return NextResponse.json(
       { success: false, message: error.message || 'Failed to fetch products' },
       { status: 500 }
@@ -28,63 +33,54 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    await connectDB();
-    
     const formData = await request.formData();
-    const price = Number(formData.get('price'));
-    const desc = formData.get('desc') as string;
-    const fullDesc = formData.get('fullDesc') as string;
-    const gender = formData.get('gender') as string;
-    const files = formData.getAll('pictures') as File[];
-    
-    if (!price || !desc || !fullDesc || !gender || !files || files.length === 0) {
+
+    const name                 = formData.get('name')                 as string;
+    const price                = Number(formData.get('price'));
+    const desc                 = formData.get('desc')                 as string;
+    const fullDesc             = formData.get('fullDesc')             as string;
+    const category             = formData.get('category')             as string;
+    const productType          = formData.get('productType')          as string;
+    const platform             = formData.get('platform')             as string;
+    const subscriptionDuration = (formData.get('subscriptionDuration') as string) || 'N/A';
+    const deliveryMethod       = (formData.get('deliveryMethod')       as string) || 'email';
+    const inStock              = formData.get('inStock') === 'on' || formData.get('inStock') === 'true';
+    const files                = formData.getAll('pictures')          as File[];
+
+    if (!name || !price || !desc || !fullDesc || !category || !productType || !platform || files.length === 0) {
       return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 });
     }
-    
-    if (!['Man', 'Woman', 'Kid', 'Parfume'].includes(gender)) {
-      return NextResponse.json({ success: false, message: 'Invalid gender category' }, { status: 400 });
+    if (!['Streaming', 'Gaming', 'Software', 'Other'].includes(category)) {
+      return NextResponse.json({ success: false, message: 'Invalid category' }, { status: 400 });
     }
-    
-    // Generate ID first and separate from other operations
-    const timestamp = Date.now();
-    
-    
-    // Upload image using specid
-    const { uploadImage } = require('../../../../backend/utils/cloudinary');
-    const imageUrl = await uploadImage(files[0], `prod_${timestamp}`);
-    console.log("[DEBUG] Image uploaded, URL:", imageUrl);
-    
-    // Create product data object
-    const productData = {
-      specid: `prod_${timestamp}`,
-      name,
-      price,
-      desc,
-      fullDesc,
-      gender,
-      pictures: [imageUrl],
-      views: 0,
-      stars: 0,
-      sold: 0
-    };
-    
-    // Create and save the product
-    const product = new Product(productData);
-    await product.save();
-    
-    console.log("[DEBUG] Product saved with specid:", product.specid);
-    
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Product created', 
-      product 
-    }, { status: 201 });
+    if (!['account', 'subscription', 'license', 'gift-card'].includes(productType)) {
+      return NextResponse.json({ success: false, message: 'Invalid product type' }, { status: 400 });
+    }
+
+    const pictureUrls = await Promise.all(files.map(saveFile));
+
+    const product = await prisma.product.create({
+      data: {
+        name, price, desc, fullDesc, category, productType, platform,
+        subscriptionDuration, deliveryMethod, inStock,
+        pictures: pictureUrls,
+        views: 0, stars: 0, sold: 0,
+      },
+    });
+
+    return NextResponse.json(
+      { success: true, message: 'Product created', product },
+      { status: 201 }
+    );
   } catch (error: any) {
-    console.error("[DEBUG] Error:", error);
-    return NextResponse.json({ 
-      success: false, 
-      message: error.message || 'Failed to create product' 
-    }, { status: 500 });
+    console.error('[products POST]', error);
+    return NextResponse.json(
+      { success: false, message: error.message || 'Failed to create product' },
+      { status: 500 }
+    );
   }
 }

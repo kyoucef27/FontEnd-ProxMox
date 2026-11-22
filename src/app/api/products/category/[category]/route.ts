@@ -1,42 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectDB } from '../../../../../../backend/routes/mongodb';
-import { Product } from '../../../../../../backend/models/Product';
+import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/jwt';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { category: string } }
+  { params }: { params: Promise<{ category: string }> }
 ) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    // Connect to MongoDB
-    await connectDB();
-    
-    const category = params.category;
-    
-    // Validate the category
-    if (!['Man', 'Woman', 'Kid', 'Parfume'].includes(category)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid category' },
-        { status: 400 }
-      );
+    const { category } = await params;
+    if (!['Streaming', 'Gaming', 'Software', 'Other'].includes(category)) {
+      return NextResponse.json({ success: false, message: 'Invalid category' }, { status: 400 });
     }
-    
-    // Find products by gender (category)
-    const products = await Product.find({ gender: category }).sort({ createdAt: -1 });
-    
-    return NextResponse.json(
-      { 
-        success: true, 
-        count: products.length,
-        products
-      },
-      { status: 200 }
-    );
-    
+
+    const products = await prisma.product.findMany({
+      where: { category },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return NextResponse.json({ success: true, count: products.length, products }, { status: 200 });
   } catch (error: any) {
-    console.error('Error fetching products by category:', error);
-    return NextResponse.json(
-      { success: false, message: error.message || 'Failed to fetch products' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }

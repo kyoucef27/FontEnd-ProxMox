@@ -1,83 +1,76 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectDB } from '../../../../../backend/routes/mongodb';
-import { Product } from '../../../../../backend/models/Product';
-import { uploadImages } from '../../../../../backend/utils/cloudinary';
+import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/jwt';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
+import { randomUUID } from 'crypto';
 
+const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
+
+/** Save a Next.js File to disk and return its public URL */
+async function saveFile(file: File): Promise<string> {
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  const ext      = path.extname(file.name) || '.jpg';
+  const filename = `${randomUUID()}${ext}`;
+  const buffer   = Buffer.from(await file.arrayBuffer());
+  await writeFile(path.join(UPLOAD_DIR, filename), buffer);
+  return `/uploads/${filename}`;
+}
+
+/**
+ * POST /api/products/upload
+ * Accepts the same multipart form as POST /api/products.
+ * Saves images locally and creates the product record.
+ */
 export async function POST(request: NextRequest) {
+  const auth = requireAuth(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    // Connect to MongoDB
-    await connectDB();
-    
-    // Process the form data
     const formData = await request.formData();
-    
-    // Extract text fields
-    const name = formData.get('name') as string;
-    const price = Number(formData.get('price'));
-    const desc = formData.get('desc') as string;
-    const fullDesc = formData.get('fullDesc') as string;
-    const gender = formData.get('gender') as string;
-    
-    // Validate required fields
-    if (!name || !price || !desc || !fullDesc || !gender) {
-      return NextResponse.json(
-        { success: false, message: 'Missing required fields' },
-        { status: 400 }
-      );
+
+    const name                 = formData.get('name')                 as string;
+    const price                = Number(formData.get('price'));
+    const desc                 = formData.get('desc')                 as string;
+    const fullDesc             = formData.get('fullDesc')             as string;
+    const category             = formData.get('category')             as string;
+    const productType          = formData.get('productType')          as string;
+    const platform             = formData.get('platform')             as string;
+    const subscriptionDuration = (formData.get('subscriptionDuration') as string) || 'N/A';
+    const deliveryMethod       = (formData.get('deliveryMethod')       as string) || 'email';
+    const inStock              = formData.get('inStock') === 'on' || formData.get('inStock') === 'true';
+    const files                = formData.getAll('pictures')          as File[];
+
+    if (!name || !price || !desc || !fullDesc || !category || !productType || !platform) {
+      return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 });
     }
-    
-    // Check if gender is valid
-    if (!['Man', 'Woman', 'Kid', 'Parfume'].includes(gender)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid gender category' },
-        { status: 400 }
-      );
+    if (!['Streaming', 'Gaming', 'Software', 'Other'].includes(category)) {
+      return NextResponse.json({ success: false, message: 'Invalid category' }, { status: 400 });
     }
-    
-    // Extract image files
-    const files = formData.getAll('pictures') as File[];
-    
-    if (!files || files.length === 0) {
-      return NextResponse.json(
-        { success: false, message: 'At least one image is required' },
-        { status: 400 }
-      );
+    if (!['account', 'subscription', 'license', 'gift-card'].includes(productType)) {
+      return NextResponse.json({ success: false, message: 'Invalid product type' }, { status: 400 });
     }
-    
-    // Generate specid first
-    const timestamp = Date.now();
-    const specid = `prod_${timestamp}`;
-    
-    // Upload images to Cloudinary with specid for the first image
-    const firstImageUrl = await uploadImages(files.slice(0, 1), specid);
-    const otherImageUrls = files.length > 1 ? await uploadImages(files.slice(1)) : [];
-    const pictureUrls = [...firstImageUrl, ...otherImageUrls];
-    
-    // Create and save the product in the database
-    const product = await Product.create({
-      specid,
-      name,
-      price,
-      desc,
-      fullDesc,
-      gender,
-      pictures: pictureUrls,
-      views: 0,
-      stars: 0,
-      sold: 0
-    });
-    
-    return NextResponse.json(
-      { 
-        success: true, 
-        message: 'Product created successfully', 
-        product 
+    if (files.length === 0) {
+      return NextResponse.json({ success: false, message: 'At least one image is required' }, { status: 400 });
+    }
+
+    const pictureUrls = await Promise.all(files.map(saveFile));
+
+    const product = await prisma.product.create({
+      data: {
+        name, price, desc, fullDesc, category, productType, platform,
+        subscriptionDuration, deliveryMethod, inStock,
+        pictures: pictureUrls,
+        views: 0, stars: 0, sold: 0,
       },
+    });
+
+    return NextResponse.json(
+      { success: true, message: 'Product created successfully', product },
       { status: 201 }
     );
-    
   } catch (error: any) {
-    console.error('Error creating product:', error);
+    console.error('[upload POST]', error);
     return NextResponse.json(
       { success: false, message: error.message || 'Failed to create product' },
       { status: 500 }

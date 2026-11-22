@@ -1,6 +1,6 @@
-# NadiaLuxe Dashboard
+# Velurian Dashboard
 
-A comprehensive admin dashboard for managing products and orders for NadiaLuxe.
+A comprehensive admin dashboard for managing products and orders for Velurian.
 
 ## Features
 

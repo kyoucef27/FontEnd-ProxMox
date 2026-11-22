@@ -1,23 +1,47 @@
+'use client';
+
 import Image from 'next/image';
 import { useState } from 'react';
-import { IProduct } from '../../backend/models/Product';
 
-type ProductCardProps = {
-  product: IProduct & { _id: string };
-  onDelete: (productId: string) => void;
+export type Product = {
+  id?: number | string;
+  _id?: string;
+  name: string;
+  price: number;
+  desc: string;
+  fullDesc: string;
+  category: string;
+  productType: string;
+  platform: string;
+  subscriptionDuration?: string;
+  deliveryMethod?: string;
+  views: number;
+  stars: number;
+  sold: number;
+  pictures: string[];
+  inStock: boolean;
 };
 
-export default function ProductCard({ product, onDelete }: ProductCardProps) {
+type ProductCardProps = {
+  product: Product;
+  onDelete: (productId: string) => void;
+  onInspect?: (product: Product) => void;
+};
+
+export default function ProductCard({ product, onDelete, onInspect }: ProductCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
-  const handleDeleteClick = () => {
+  const productId = (product.id ?? product._id)?.toString() || '';
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setShowConfirmation(true);
   };
 
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
-    await onDelete(product._id);
+    await onDelete(productId);
     setIsDeleting(false);
     setShowConfirmation(false);
   };
@@ -25,85 +49,144 @@ export default function ProductCard({ product, onDelete }: ProductCardProps) {
   const handleCancelDelete = () => {
     setShowConfirmation(false);
   };
-  return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden transition-all hover:shadow-lg relative">
-      {/* Delete Button */}
-      <button 
-        onClick={handleDeleteClick}
-        className="absolute top-2 right-2 z-10 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors"
-        title="Delete product"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-      </button>
 
-      <div className="relative h-64 w-full">
-        {product.pictures && product.pictures.length > 0 ? (
-          <Image
-            src={product.pictures[0]}
-            alt={product.name}
-            fill
-            className="object-cover"
-          />
-        ) : (
-          <div className="h-full w-full bg-gray-200 flex items-center justify-center text-gray-500">
-            No Image
+  const handleCardClick = () => {
+    if (onInspect) {
+      onInspect(product);
+    }
+  };
+
+  return (
+    <article 
+      onClick={handleCardClick}
+      className="border border-[#1E2126] bg-[#111316] hover:border-neutral-400 transition-all duration-200 flex flex-col justify-between group relative cursor-pointer"
+    >
+      <div>
+        {/* Gallery Image Display */}
+        <div className="relative aspect-[4/3] w-full bg-[#0C0D10] border-b border-[#1E2126] overflow-hidden">
+          {product.pictures && product.pictures.length > 0 ? (
+            <Image
+              src={product.pictures[0]}
+              alt={product.name}
+              fill
+              sizes="(max-width: 768px) 100vw, 33vw"
+              className="object-cover grayscale-[20%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-300"
+            />
+          ) : (
+            <div className="h-full w-full flex flex-col items-center justify-center font-data text-xs text-neutral-500">
+              <span>[ NO VISUAL ATTACHED ]</span>
+            </div>
+          )}
+
+          {/* Type / Platform Tag Overlay */}
+          <div className="absolute top-2.5 left-2.5 flex space-x-1.5">
+            <span className="font-data text-[9px] uppercase tracking-widest px-2 py-0.5 bg-[#0B0C0E]/90 border border-[#2B2F37] text-neutral-300 backdrop-blur-sm">
+              {product.category}
+            </span>
+            {product.platform && (
+              <span className="font-data text-[9px] uppercase tracking-widest px-2 py-0.5 bg-[#0B0C0E]/90 border border-[#2B2F37] text-neutral-400 backdrop-blur-sm">
+                {product.platform}
+              </span>
+            )}
           </div>
-        )}
-      </div>
-      <div className="p-4">
-        <h3 className="text-lg font-semibold text-gray-800">{product.name}</h3>
-        <p className="text-gray-600 text-sm mt-1 line-clamp-2">{product.desc}</p>
-        <div className="mt-3 flex justify-between items-center">
-          <span className="text-xl font-bold text-gray-900">{product.price} DZD</span>
-          <div className="flex items-center text-sm text-gray-500">
-            <span className="mr-1">{product.stars.toFixed(1)}</span>
-            <svg className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            <span className="ml-2">({product.reviews})</span>
+
+          {/* Stock Indicator Top-Right */}
+          <div className="absolute top-2.5 right-2.5">
+            <span
+              className={`font-data text-[9px] uppercase tracking-widest px-2 py-0.5 border backdrop-blur-sm ${
+                product.inStock
+                  ? 'bg-[#0B0C0E]/90 border-emerald-500/40 text-emerald-400'
+                  : 'bg-[#0B0C0E]/90 border-neutral-700 text-neutral-500'
+              }`}
+            >
+              {product.inStock ? 'Available' : 'Depleted'}
+            </span>
           </div>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="font-display text-base font-normal text-white group-hover:underline underline-offset-4 truncate">
+              {product.name}
+            </h3>
+            <span className="font-data text-xs font-semibold text-white tracking-tight shrink-0">
+              {product.price.toLocaleString()} <span className="text-[10px] text-neutral-400 font-normal">DZD</span>
+            </span>
+          </div>
+
+          <p className="text-xs text-neutral-400 font-light line-clamp-2 leading-relaxed">
+            {product.desc}
+          </p>
         </div>
       </div>
 
+      {/* Footer / Meta Specs & Actions */}
+      <div className="px-4 py-3 border-t border-[#1C1F24] bg-[#0E1012] flex items-center justify-between font-data text-[10px] text-neutral-400">
+        <div className="flex items-center space-x-2">
+          <span>SOLD: {product.sold || 0}</span>
+          <span>&bull;</span>
+          <span className="uppercase">{product.deliveryMethod || 'Instant'}</span>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCardClick();
+            }}
+            className="text-neutral-300 hover:text-white uppercase tracking-wider transition-colors"
+          >
+            Inspect
+          </button>
+          <span className="text-neutral-700">|</span>
+          <button
+            onClick={handleDeleteClick}
+            className="text-neutral-500 hover:text-rose-400 uppercase tracking-wider transition-colors cursor-pointer"
+            title="Delete product record"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      {/* Minimalist Confirmation Overlay */}
       {showConfirmation && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black opacity-50" onClick={handleCancelDelete}></div>
-          <div className="bg-white rounded-lg p-6 max-w-sm mx-4 z-10 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Delete Product</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete &quot;{product.name}&quot;? This action cannot be undone.
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm cursor-default"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="border border-[#2B2F37] bg-[#121418] max-w-sm w-full p-6 space-y-4 shadow-2xl relative">
+            <div className="space-y-1">
+              <span className="font-data text-[10px] uppercase tracking-[0.2em] text-rose-400 block">
+                Confirm Purge
+              </span>
+              <h4 className="font-display text-lg text-white font-normal">
+                Delete &ldquo;{product.name}&rdquo;?
+              </h4>
+            </div>
+            <p className="text-xs text-neutral-400 leading-relaxed font-light">
+              This will permanently revoke this item from the catalog and delete any locally hosted asset photography. This operation cannot be reversed.
             </p>
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end space-x-3 pt-2 font-data text-xs">
               <button
                 onClick={handleCancelDelete}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 border border-[#2B2F37] text-neutral-300 hover:text-white uppercase tracking-wider transition-colors cursor-pointer"
                 disabled={isDeleting}
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white uppercase tracking-wider font-semibold transition-colors cursor-pointer disabled:opacity-50"
                 disabled={isDeleting}
               >
-                {isDeleting ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Deleting...
-                  </>
-                ) : (
-                  'Delete'
-                )}
+                {isDeleting ? 'Purging...' : 'Confirm Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </article>
   );
 }

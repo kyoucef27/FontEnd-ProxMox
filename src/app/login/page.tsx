@@ -1,78 +1,158 @@
 'use client';
 
-import { signIn } from 'next-auth/react';
 import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const searchParams = useSearchParams();
-  const error = searchParams.get('error');
 
-  const handleGitHubLogin = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setIsLoading(true);
-    await signIn('github', { callbackUrl: '/' });
+    setError(null);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'Authentication rejected: Invalid credentials.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Store token in localStorage and cookie
+      localStorage.setItem('token', data.token);
+      document.cookie = `token=${data.token}; path=/; max-age=${8 * 3600}; SameSite=Lax`;
+      
+      // Hard navigation to dashboard
+      window.location.href = '/';
+    } catch (err: any) {
+      setError(err.message || 'System error: Unable to contact authentication endpoint.');
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">NadiaLuxe</h1>
-          <h2 className="mt-6 text-2xl font-bold tracking-tight text-gray-900">
-            Admin Dashboard Login
-          </h2>
-          <p className="mt-2 text-gray-600">
-            Please sign in with your GitHub account
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            (Only authorized accounts can access this dashboard)
-          </p>
+    <div className="min-h-screen bg-[#0B0C0E] text-[#EDEDED] flex flex-col justify-between p-6 sm:p-10">
+      {/* Top Ledger Header */}
+      <div className="flex justify-between items-center font-data text-[11px] uppercase tracking-[0.2em] text-neutral-500 border-b border-[#1A1D22] pb-4">
+        <div className="flex items-center space-x-2">
+          <span className="h-1.5 w-1.5 bg-white inline-block" />
+          <span className="text-white font-medium">VELURIAN</span>
+          <span className="text-neutral-700">/</span>
+          <span>SECURITY GATEWAY</span>
         </div>
+        <div className="hidden sm:block">STATUS: STANDBY</div>
+      </div>
 
-        {error && (
-          <div className="rounded-md bg-red-50 p-4 mt-4">
-            <div className="flex">
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">
-                  Authentication Error
-                </h3>
-                <div className="mt-2 text-sm text-red-700">
-                  <p>
-                    {error === 'AccessDenied' 
-                      ? 'You are not authorized to access this dashboard.' 
-                      : 'An error occurred during sign in. Please try again.'}
-                  </p>
-                </div>
-              </div>
-            </div>
+      {/* Main Authentication Card */}
+      <div className="w-full max-w-md mx-auto my-auto py-12">
+        <div className="border border-[#22252C] bg-[#111317] p-8 sm:p-10 space-y-8 relative">
+          {/* Subtle architectural corner accents */}
+          <span className="absolute -top-[1px] -left-[1px] w-2 h-2 border-t border-l border-white/60" />
+          <span className="absolute -top-[1px] -right-[1px] w-2 h-2 border-t border-r border-white/60" />
+          <span className="absolute -bottom-[1px] -left-[1px] w-2 h-2 border-b border-l border-white/60" />
+          <span className="absolute -bottom-[1px] -right-[1px] w-2 h-2 border-b border-r border-white/60" />
+
+          {/* Header Typography */}
+          <div className="space-y-3">
+            <span className="font-data text-[10px] uppercase tracking-[0.25em] text-neutral-400 block">
+              Authorization Required
+            </span>
+            <h1 className="text-3xl font-display font-normal text-white tracking-tight">
+              Sign In to Console
+            </h1>
+            <p className="text-xs text-neutral-400 font-light leading-relaxed">
+              Enter your verified credentials to access the Velurian catalog and transaction ledger.
+            </p>
           </div>
-        )}
 
-        <div className="mt-8">
-          <button
-            onClick={handleGitHubLogin}
-            disabled={isLoading}
-            className="group relative flex w-full justify-center rounded-md border border-transparent bg-gray-800 py-3 px-4 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-70"
-          >
-            {isLoading ? (
-              <span className="flex items-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Signing in...
-              </span>
-            ) : (
-              <span className="flex items-center">
-                <svg className="mr-2 h-5 w-5" aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
-                  <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-                </svg>
-                Sign in with GitHub
-              </span>
-            )}
-          </button>
+          {/* Diagnostic Error Banner */}
+          {error && (
+            <div className="border border-rose-900/60 bg-rose-950/20 p-3.5 font-data text-xs text-rose-300">
+              <span className="font-semibold block mb-0.5 text-rose-200">ACCESS DENIED</span>
+              {error}
+            </div>
+          )}
+
+          {/* Login Form */}
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            <div className="space-y-1.5">
+              <label 
+                htmlFor="email-address" 
+                className="block font-data text-[11px] uppercase tracking-wider text-neutral-400"
+              >
+                Operator Email
+              </label>
+              <input
+                id="email-address"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                className="w-full bg-[#0C0E11] border border-[#262A32] px-3.5 py-2.5 text-sm text-white font-data placeholder-neutral-600 focus:border-white focus:outline-none transition-colors"
+                placeholder="operator@velurian.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label 
+                  htmlFor="password" 
+                  className="block font-data text-[11px] uppercase tracking-wider text-neutral-400"
+                >
+                  Password Key
+                </label>
+              </div>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                className="w-full bg-[#0C0E11] border border-[#262A32] px-3.5 py-2.5 text-sm text-white font-data placeholder-neutral-600 focus:border-white focus:outline-none transition-colors"
+                placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3 bg-white text-black font-data text-xs uppercase tracking-[0.2em] font-semibold hover:bg-neutral-200 focus:outline-none transition-all duration-150 disabled:opacity-50 cursor-pointer flex items-center justify-center space-x-2"
+              >
+                {isLoading ? (
+                  <span>AUTHENTICATING...</span>
+                ) : (
+                  <span>AUTHENTICATE &rarr;</span>
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* Security Notice */}
+          <div className="pt-4 border-t border-[#1C1F25] flex items-center justify-between font-data text-[10px] text-neutral-400">
+            <span>PROTOCOL: JWT / AES-256</span>
+            <span>RESTRICTED TERMINAL</span>
+          </div>
         </div>
+      </div>
+
+      {/* Bottom Footer Stamp */}
+      <div className="flex flex-col sm:flex-row justify-between items-center font-data text-[10px] text-neutral-400 uppercase tracking-widest pt-4 border-t border-[#1A1D22] gap-2">
+        <span>Velurian Atelier Core Infrastructure</span>
+        <span>Authorized Personnel Only</span>
       </div>
     </div>
   );
